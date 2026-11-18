@@ -117,7 +117,7 @@ public class PrimitiveScreen extends Screen {
         boolean rec = MacroEngine.state == MacroEngine.State.RECORDING;
         boolean play = MacroEngine.state == MacroEngine.State.PLAYING;
 
-        panel(c, x, y, w, HEAD + 86, "MACRO");
+        panel(c, x, y, w, HEAD + 100, "MACRO");
         int ry = y + HEAD;
 
         toggleRow(c, x, ry, w, "RECORD", rec, mx, my, () -> {
@@ -159,6 +159,8 @@ public class PrimitiveScreen extends Screen {
         ry += ROW;
         Macro sel = Store.selected();
         infoRow(c, x, ry, w, "ACTIVE", sel == null ? "NONE" : sel.name, sel == null ? DIM : BLUE);
+        ry += ROW;
+        infoRow(c, x, ry, w, "CHAT", sel == null ? "-" : String.valueOf(sel.chatText.length), sel == null ? DIM : WHITE);
     }
 
     // ---------------------------------------------------------------- MACRO SAVES panel

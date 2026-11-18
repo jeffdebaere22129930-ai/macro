@@ -14,13 +14,18 @@ public class Macro {
     public float[] pitch = new float[0];
     public byte[] slot = new byte[0];    // selected hotbar slot per tick
 
+    // chat messages / commands typed while recording: sent again at the same tick on playback
+    public int[] chatTick = new int[0];
+    public String[] chatText = new String[0]; // starts with "/" for commands
+
     public int length() {
         return keys.length;
     }
 
     public boolean valid() {
         return id != null && name != null && keys != null && yaw != null && pitch != null && slot != null
-                && keys.length == yaw.length && yaw.length == pitch.length && pitch.length == slot.length;
+                && keys.length == yaw.length && yaw.length == pitch.length && pitch.length == slot.length
+                && chatTick != null && chatText != null && chatTick.length == chatText.length;
     }
 
     public String duration() {

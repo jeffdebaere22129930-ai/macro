@@ -34,11 +34,14 @@ public final class MacroEngine {
     private static final List<Float> rYaw = new ArrayList<>();
     private static final List<Float> rPitch = new ArrayList<>();
     private static final List<Integer> rSlot = new ArrayList<>();
+    private static final List<Integer> rChatTick = new ArrayList<>();
+    private static final List<String> rChatText = new ArrayList<>();
 
     // ---- playback state
     private static Macro current;
     private static int idx;
     private static int prevMask;
+    private static int chatPos;
     private static float yawOff;
     private static float pitchOff;
 
@@ -95,6 +98,7 @@ public final class MacroEngine {
             if (idx >= current.length()) {
                 if (Store.settings.loop) {
                     idx = 0;
+                    chatPos = 0;
                 } else {
                     stopPlayback(mc, "Macro finished");
                 }
@@ -120,6 +124,30 @@ public final class MacroEngine {
         return modifier.isUnbound() || modifier.isPressed();
     }
 
+    // ================================================================ chat
+
+    /** Called by Fabric when the player sends a chat message. */
+    public static void onChat(String message) {
+        if (state == State.RECORDING && message != null && !message.isBlank()) {
+            rChatTick.add(rKeys.size());
+            rChatText.add(message);
+        }
+    }
+
+    /** Called by Fabric when the player sends a command (text comes without the leading slash). */
+    public static void onCommand(String command) {
+        if (state == State.RECORDING && command != null && !command.isBlank()) {
+            rChatTick.add(rKeys.size());
+            rChatText.add("/" + command);
+        }
+    }
+
+    private static void sendChat(MinecraftClient mc, String text) {
+        if (mc.player == null || mc.player.networkHandler == null) return;
+        if (text.startsWith("/")) mc.player.networkHandler.sendChatCommand(text.substring(1));
+        else mc.player.networkHandler.sendChatMessage(text);
+    }
+
     // ================================================================ recording
 
     public static void toggleRecording(MinecraftClient mc) {
@@ -139,6 +167,14 @@ public final class MacroEngine {
         if (state != State.RECORDING) return;
         state = State.IDLE;
 
+        // a macro that is only chat still needs a couple of (idle) frames to play on
+        while (save && !rChatText.isEmpty() && rKeys.size() < 2 && mc.player != null) {
+            rKeys.add(0);
+            rYaw.add(mc.player.getYaw());
+            rPitch.add(mc.player.getPitch());
+            rSlot.add(mc.player.getInventory().getSelectedSlot());
+        }
+
         int n = rKeys.size();
         if (save && n >= 2) {
             Macro m = new Macro();
@@ -153,8 +189,15 @@ public final class MacroEngine {
                 m.pitch[i] = rPitch.get(i);
                 m.slot[i] = rSlot.get(i).byteValue();
             }
+            int c = rChatText.size();
+            m.chatTick = new int[c];
+            m.chatText = new String[c];
+            for (int i = 0; i < c; i++) {
+                m.chatTick[i] = Math.min(rChatTick.get(i), n - 1); // messages sent after the last tick go on the last tick
+                m.chatText[i] = rChatText.get(i);
+            }
             Store.add(m);
-            toast(mc, "Saved \"" + m.name + "\" (" + m.duration() + ")");
+            toast(mc, "Saved \"" + m.name + "\" (" + m.duration() + (c > 0 ? ", " + c + " chat" : "") + ")");
         } else {
             toast(mc, "Nothing recorded");
         }
@@ -166,6 +209,8 @@ public final class MacroEngine {
         rYaw.clear();
         rPitch.clear();
         rSlot.clear();
+        rChatTick.clear();
+        rChatText.clear();
     }
 
     private static void capture(MinecraftClient mc) {
@@ -203,6 +248,7 @@ public final class MacroEngine {
         current = m;
         idx = 0;
         prevMask = 0;
+        chatPos = 0;
         if (Store.settings.relativeAim) {
             yawOff = mc.player.getYaw() - m.yaw[0];
             pitchOff = mc.player.getPitch() - m.pitch[0];
@@ -242,6 +288,11 @@ public final class MacroEngine {
             }
         }
         prevMask = mask;
+
+        while (chatPos < m.chatText.length && m.chatTick[chatPos] <= idx) {
+            sendChat(mc, m.chatText[chatPos]);
+            chatPos++;
+        }
 
         int slot = m.slot[idx];
         PlayerInventory inv = mc.player.getInventory();
